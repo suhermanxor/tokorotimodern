@@ -5,6 +5,7 @@ import ProductsSection from "@/components/ProductsSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
 import ContactSection from "@/components/ContactSection";
 import Footer from "@/components/Footer";
+import AgenAliaChat from "@/components/AgenAliaChat";
 
 const Index = () => {
   return (
@@ -16,6 +17,7 @@ const Index = () => {
       <TestimonialsSection />
       <ContactSection />
       <Footer />
+      <AgenAliaChat />
     </div>
   );
 };
