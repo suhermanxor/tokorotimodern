@@ -1,0 +1,4 @@
+project_id = "lrbjggcapxzulicmavex"
+
+[functions.agen-alia-chat]
+verify_jwt = false
