@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogIn, LogOut, User } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const { user, signOut } = useAuth();
 
   const navLinks = [
     { name: "Beranda", href: "#beranda" },
@@ -38,9 +40,25 @@ const Navbar = () => {
                 {link.name}
               </a>
             ))}
-            <Button variant="hero" size="lg">
-              Pesan Sekarang
-            </Button>
+            {user ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <User size={16} />
+                  {user.user_metadata?.full_name || user.email?.split("@")[0]}
+                </span>
+                <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
+                  <LogOut size={16} />
+                  Keluar
+                </Button>
+              </div>
+            ) : (
+              <a href="/auth">
+                <Button variant="hero" size="lg" className="gap-2">
+                  <LogIn size={18} />
+                  Masuk
+                </Button>
+              </a>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -67,9 +85,25 @@ const Navbar = () => {
                   {link.name}
                 </a>
               ))}
-              <Button variant="hero" size="lg" className="mt-2">
-                Pesan Sekarang
-              </Button>
+              {user ? (
+                <>
+                  <span className="text-sm text-muted-foreground flex items-center gap-1 py-2">
+                    <User size={16} />
+                    {user.user_metadata?.full_name || user.email?.split("@")[0]}
+                  </span>
+                  <Button variant="outline" size="lg" onClick={signOut} className="gap-2 mt-2">
+                    <LogOut size={16} />
+                    Keluar
+                  </Button>
+                </>
+              ) : (
+                <a href="/auth">
+                  <Button variant="hero" size="lg" className="gap-2 mt-2 w-full">
+                    <LogIn size={18} />
+                    Masuk
+                  </Button>
+                </a>
+              )}
             </div>
           </div>
         )}
