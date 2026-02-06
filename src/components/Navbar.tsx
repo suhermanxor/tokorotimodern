@@ -42,10 +42,10 @@ const Navbar = () => {
             ))}
             {user ? (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <a href="/profil" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors">
                   <User size={16} />
                   {user.user_metadata?.full_name || user.email?.split("@")[0]}
-                </span>
+                </a>
                 <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
                   <LogOut size={16} />
                   Keluar
