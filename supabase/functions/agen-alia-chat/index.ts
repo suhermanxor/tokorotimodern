@@ -130,12 +130,12 @@ serve(async (req) => {
 
   try {
     const { messages } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!GOOGLE_API_KEY) {
+      throw new Error("GOOGLE_API_KEY is not configured");
     }
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error("Supabase environment variables not configured");
@@ -160,48 +160,117 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(matchedProducts);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
-    });
+    // Convert messages to Google Generative AI format
+    const googleMessages = messages.map((msg: any) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
+    }));
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:streamGenerateContent?key=${GOOGLE_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: systemPrompt }],
+          },
+          contents: googleMessages,
+          generationConfig: {
+            temperature: 0.7,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      
+      console.error("Google Generative AI error:", response.status, errorText);
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Terlalu banyak permintaan, mohon coba lagi nanti." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Kredit AI habis, mohon hubungi admin." }), {
-          status: 402,
+      if (response.status === 400) {
+        return new Response(JSON.stringify({ error: "Permintaan tidak valid. Silakan coba lagi." }), {
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      
+
       return new Response(JSON.stringify({ error: "Terjadi kesalahan pada AI" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("Streaming response from AI gateway");
+    console.log("Streaming response from Google Generative AI");
 
-    return new Response(response.body, {
+    // Transform Google's JSON lines format to Server-Sent Events
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const encoder = new TextEncoder();
+    let buffer = "";
+
+    const transformStream = new ReadableStream({
+      async start(controller) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += new TextDecoder().decode(value);
+            const lines = buffer.split("\n");
+            buffer = lines[lines.length - 1];
+
+            for (let i = 0; i < lines.length - 1; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+
+              try {
+                const data = JSON.parse(line);
+                if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                  const text = data.candidates[0].content.parts[0].text;
+                  const sseEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+                  controller.enqueue(encoder.encode(sseEvent));
+                }
+              } catch (e) {
+                console.error("Error parsing line:", line, e);
+              }
+            }
+          }
+
+          // Process remaining buffer
+          if (buffer.trim()) {
+            try {
+              const data = JSON.parse(buffer);
+              if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                const text = data.candidates[0].content.parts[0].text;
+                const sseEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+                controller.enqueue(encoder.encode(sseEvent));
+              }
+            } catch (e) {
+              console.error("Error parsing final buffer:", buffer, e);
+            }
+          }
+
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+    });
+
+    return new Response(transformStream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (error) {
