@@ -1,4 +1,7 @@
-project_id = "lrbjggcapxzulicmavex"
+project_id = "yibvxqtlwcvlcsasyaaa"
 
 [functions.agen-alia-chat]
+verify_jwt = false
+
+[functions.seed-products]
 verify_jwt = false

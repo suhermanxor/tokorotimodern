@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      products: {
+        Row: {
+          id: string
+          name: string
+          description: string
+          price: number
+          badge: string | null
+          embedding: number[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description: string
+          price: number
+          badge?: string | null
+          embedding?: number[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string
+          price?: number
+          badge?: string | null
+          embedding?: number[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       favorite_orders: {
         Row: {
           created_at: string
@@ -76,7 +109,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_products: {
+        Args: {
+          query_embedding: number[]
+          match_count?: number
+          match_threshold?: number
+        }
+        Returns: {
+          id: string
+          name: string
+          description: string
+          price: number
+          badge: string | null
+          similarity: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
