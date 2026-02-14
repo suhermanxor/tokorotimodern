@@ -191,12 +191,12 @@ serve(async (req) => {
 
   try {
     const { messages } = await req.json();
-    const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!GOOGLE_API_KEY) {
-      throw new Error("GOOGLE_API_KEY is not configured");
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY is not configured");
     }
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       throw new Error("Supabase environment variables not configured");
@@ -221,44 +221,87 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(matchedProducts);
 
-    // Generate response menggunakan keyword matching + RAG products
-    const userQuery = lastUserMessage?.content || "";
-    const aiResponse = generateKeywordResponse(userQuery, matchedProducts);
+    console.log("Calling Groq API with system prompt and RAG products");
 
-    console.log("Generated response:", aiResponse);
+    // Call Groq API (OpenAI compatible)
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages,
+        ],
+        max_tokens: 1024,
+        stream: true,
+      }),
+    });
 
-    // Convert response to SSE format for streaming effect
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Groq API error:", response.status, errorText);
+
+      return new Response(
+        JSON.stringify({
+          error: "Terjadi kesalahan pada AI",
+          details: errorText,
+        }),
+        {
+          status: response.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    console.log("Streaming response from Groq API");
+
+    // Transform Groq's OpenAI-compatible streaming format to SSE
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
     const encoder = new TextEncoder();
+    let buffer = "";
 
     const transformStream = new ReadableStream({
-      start(controller) {
+      async start(controller) {
         try {
-          // Stream response character by character for smooth typing effect
-          let charIndex = 0;
-          const text = aiResponse;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          const streamCharacter = () => {
-            if (charIndex < text.length) {
-              const char = text[charIndex];
-              const sseEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: char } }] })}\n\n`;
-              controller.enqueue(encoder.encode(sseEvent));
-              charIndex++;
+            buffer += new TextDecoder().decode(value);
+            const lines = buffer.split("\n");
+            buffer = lines[lines.length - 1];
 
-              // Stream at different speeds based on punctuation
-              let delay = 30; // default ms per character
-              if (char === "." || char === "!" || char === "?") {
-                delay = 100; // longer pause after punctuation
-              } else if (char === " ") {
-                delay = 20; // faster between words
+            for (let i = 0; i < lines.length - 1; i++) {
+              const line = lines[i].trim();
+              if (!line || !line.startsWith("data:")) continue;
+
+              try {
+                const dataStr = line.substring(5).trim();
+                if (dataStr === "[DONE]") continue;
+
+                const data = JSON.parse(dataStr);
+
+                // Extract text from OpenAI-compatible format
+                if (data.choices?.[0]?.delta?.content) {
+                  const text = data.choices[0].delta.content;
+                  const sseEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+                  controller.enqueue(encoder.encode(sseEvent));
+                }
+              } catch (e) {
+                // Silently ignore parsing errors
               }
-
-              setTimeout(streamCharacter, delay);
-            } else {
-              controller.close();
             }
-          };
+          }
 
-          streamCharacter();
+          controller.close();
         } catch (error) {
           console.error("Stream error:", error);
           controller.error(error);

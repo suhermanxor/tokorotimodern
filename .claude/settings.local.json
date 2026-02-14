@@ -16,7 +16,10 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(dd:*)",
-      "Bash(timeout 8 bash -c 'curl -v -N -X POST https://yibvxqtlwcvlcsasyaaa.supabase.co/functions/v1/agen-alia-chat   -H \"\"Content-Type: application/json\"\"   -d @/tmp/chat_test.json 2>&1')"
+      "Bash(timeout 8 bash -c 'curl -v -N -X POST https://yibvxqtlwcvlcsasyaaa.supabase.co/functions/v1/agen-alia-chat   -H \"\"Content-Type: application/json\"\"   -d @/tmp/chat_test.json 2>&1')",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35f88d35416f4c1c79298cb30ca0ffd096d99343\" npx supabase secrets set CLAUDE_API_KEY=\"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\")",
+      "Bash(timeout 10 bash -c 'curl -N -X POST https://yibvxqtlwcvlcsasyaaa.supabase.co/functions/v1/agen-alia-chat   -H \"\"Content-Type: application/json\"\"   --data-binary @/tmp/groq_test.json 2>/dev/null')",
+      "Bash(timeout 12 bash -c 'curl -N -X POST https://yibvxqtlwcvlcsasyaaa.supabase.co/functions/v1/agen-alia-chat   -H \"\"Content-Type: application/json\"\"   --data-binary @/tmp/groq_test.json 2>/dev/null')"
     ]
   }
 }
