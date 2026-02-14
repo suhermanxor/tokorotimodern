@@ -11,7 +11,12 @@
       "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_35f88d35416f4c1c79298cb30ca0ffd096d99343\" npx supabase secrets set GOOGLE_API_KEY=\"AIzaSyD6nuWiYWxBS98U2CjX9YR2_6Jda9Y6RyM\")",
       "Bash(npx supabase functions deploy:*)",
       "Bash(npm run dev:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(dd:*)",
+      "Bash(timeout 8 bash -c 'curl -v -N -X POST https://yibvxqtlwcvlcsasyaaa.supabase.co/functions/v1/agen-alia-chat   -H \"\"Content-Type: application/json\"\"   -d @/tmp/chat_test.json 2>&1')"
     ]
   }
 }

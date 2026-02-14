@@ -123,6 +123,67 @@ Produk yang relevan dengan pertanyaan pelanggan:
 ${productsInfo}`;
 }
 
+function generateKeywordResponse(userMessage: string, matchedProducts: MatchedProduct[]): string {
+  const msg = userMessage.toLowerCase();
+
+  // Harga queries
+  if (msg.includes("harga") || msg.includes("berapa") || msg.includes("price")) {
+    if (matchedProducts.length > 0) {
+      const prices = matchedProducts
+        .map((p) => `${p.name}: ${formatPrice(p.price)}`)
+        .join(", ");
+      return `Harga ${matchedProducts[0].name}: ${formatPrice(matchedProducts[0].price)} 💰\n\nProduk lainnya: ${prices}`;
+    }
+    return "Silakan tanyakan produk spesifik untuk mengetahui harganya! 😊";
+  }
+
+  // Deskripsi/Info queries
+  if (msg.includes("apa itu") || msg.includes("apa sih") || msg.includes("bagaimana") || msg.includes("describe")) {
+    if (matchedProducts.length > 0) {
+      const p = matchedProducts[0];
+      const badge = p.badge ? ` (${p.badge})` : "";
+      return `${p.name}${badge} adalah: ${p.description}\n\nHarga: ${formatPrice(p.price)} 🥐`;
+    }
+    return "Produk yang Anda tanyakan tidak ada di menu kami. Silakan lihat menu lengkap! 📋";
+  }
+
+  // Availability/Ada queries
+  if (msg.includes("ada") || msg.includes("tersedia") || msg.includes("punya")) {
+    if (matchedProducts.length > 0) {
+      const names = matchedProducts.map((p) => p.name).join(", ");
+      return `Iya, kami punya ${names}! ✅ Berapa yang mau kamu pesan? 🛒`;
+    }
+    return "Maaf, produk itu tidak tersedia saat ini. Coba tanya produk lain ya! 😊";
+  }
+
+  // Rekomendasi
+  if (msg.includes("rekomendasi") || msg.includes("recommend") || msg.includes("suggest")) {
+    return `Saya rekomendasikan Croissant Butter kami! 🥐 Renyah, lezat, dan harga terjangkau ${formatPrice(18000)}. Atau kalau suka coklat, Chocolate Cake kami juga super enak! 🍰`;
+  }
+
+  // Jam operasional
+  if (msg.includes("jam") || msg.includes("buka") || msg.includes("tutup") || msg.includes("operation")) {
+    return `Toko kami buka setiap hari:\n⏰ Senin - Minggu: 07:00 - 21:00 WIB\n\nSilakan kunjungi kami! 😊`;
+  }
+
+  // Lokasi
+  if (msg.includes("lokasi") || msg.includes("alamat") || msg.includes("dimana") || msg.includes("location")) {
+    return `📍 Lokasi kami:\nJl. Raya Bakery No. 123, Jakarta Selatan\n\nTunggu kunjunganmu! 🎉`;
+  }
+
+  // Salam
+  if (msg.includes("halo") || msg.includes("hi") || msg.includes("hello") || msg.includes("pagi") || msg.includes("sore") || msg.includes("malam")) {
+    return `Halo! 👋 Selamat datang di Toko Roti Alia! Aku Agen Alia, siap membantu kamu menemukan produk terbaik kami. Ada yang bisa aku bantu? 😊`;
+  }
+
+  // Default response
+  if (matchedProducts.length > 0) {
+    return `Kamu tertarik dengan ${matchedProducts[0].name}? ${matchedProducts[0].description}\n\nHarga: ${formatPrice(matchedProducts[0].price)} 💰\n\nMau pesan? 🛒`;
+  }
+
+  return `Terima kasih atas pertanyaanmu! 😊 Aku bisa membantu dengan:\n- Informasi harga produk\n- Deskripsi produk\n- Jam operasional (07:00-21:00 WIB)\n- Lokasi toko\n\nAda yang bisa aku bantu? 🤔`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -160,111 +221,46 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(matchedProducts);
 
-    // Convert messages to Google Generative AI format
-    const googleMessages = messages.map((msg: any) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }));
+    // Generate response menggunakan keyword matching + RAG products
+    const userQuery = lastUserMessage?.content || "";
+    const aiResponse = generateKeywordResponse(userQuery, matchedProducts);
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:streamGenerateContent?key=${GOOGLE_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: systemPrompt }],
-          },
-          contents: googleMessages,
-          generationConfig: {
-            temperature: 0.7,
-            topP: 0.95,
-            maxOutputTokens: 1024,
-          },
-        }),
-      }
-    );
+    console.log("Generated response:", aiResponse);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Google Generative AI error:", response.status, errorText);
-
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Terlalu banyak permintaan, mohon coba lagi nanti." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 400) {
-        return new Response(JSON.stringify({ error: "Permintaan tidak valid. Silakan coba lagi." }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "Terjadi kesalahan pada AI" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    console.log("Streaming response from Google Generative AI");
-
-    // Transform Google's JSON lines format to Server-Sent Events
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("No response body");
-    }
-
+    // Convert response to SSE format for streaming effect
     const encoder = new TextEncoder();
-    let buffer = "";
 
     const transformStream = new ReadableStream({
-      async start(controller) {
+      start(controller) {
         try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          // Stream response character by character for smooth typing effect
+          let charIndex = 0;
+          const text = aiResponse;
 
-            buffer += new TextDecoder().decode(value);
-            const lines = buffer.split("\n");
-            buffer = lines[lines.length - 1];
+          const streamCharacter = () => {
+            if (charIndex < text.length) {
+              const char = text[charIndex];
+              const sseEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: char } }] })}\n\n`;
+              controller.enqueue(encoder.encode(sseEvent));
+              charIndex++;
 
-            for (let i = 0; i < lines.length - 1; i++) {
-              const line = lines[i].trim();
-              if (!line) continue;
-
-              try {
-                const data = JSON.parse(line);
-                if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-                  const text = data.candidates[0].content.parts[0].text;
-                  const sseEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
-                  controller.enqueue(encoder.encode(sseEvent));
-                }
-              } catch (e) {
-                console.error("Error parsing line:", line, e);
+              // Stream at different speeds based on punctuation
+              let delay = 30; // default ms per character
+              if (char === "." || char === "!" || char === "?") {
+                delay = 100; // longer pause after punctuation
+              } else if (char === " ") {
+                delay = 20; // faster between words
               }
-            }
-          }
 
-          // Process remaining buffer
-          if (buffer.trim()) {
-            try {
-              const data = JSON.parse(buffer);
-              if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-                const text = data.candidates[0].content.parts[0].text;
-                const sseEvent = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
-                controller.enqueue(encoder.encode(sseEvent));
-              }
-            } catch (e) {
-              console.error("Error parsing final buffer:", buffer, e);
+              setTimeout(streamCharacter, delay);
+            } else {
+              controller.close();
             }
-          }
+          };
 
-          controller.close();
+          streamCharacter();
         } catch (error) {
+          console.error("Stream error:", error);
           controller.error(error);
         }
       },
